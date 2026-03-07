@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>百人一首 練習ゲーム</title>
+<style>
+/* ===== リセット & ベース ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #1a1208;
+  --bg2:       #221910;
+  --gold:      #c9a84c;
+  --gold2:     #e8c97a;
+  --card-bg:   #fdf6e3;
+  --card-border: #c9a84c;
+  --text-dark: #1a0e00;
+  --text-light:#f5e8c0;
+  --radius:    6px;
+  --tr:        0.25s ease;
+}
+
+html, body {
+  height: 100%;
+  font-family: 'Hiragino Mincho ProN','Yu Mincho','MS Mincho',serif;
+  background: var(--bg);
+  color: var(--text-light);
+  overflow: hidden;
+  user-select: none;
+}
+
+/* ===== スクリーン共通 ===== */
+.screen {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  transition: opacity 0.4s ease;
+}
+.screen.hidden { opacity: 0; pointer-events: none; }
+
+/* ===== タイトル画面 ===== */
+#title-screen {
+  background: radial-gradient(ellipse at center,#2d1e08 0%,#0d0904 100%);
+  gap: 32px;
+}
+.title-logo { text-align: center; }
+.title-logo .main {
+  font-size: clamp(2rem,5vw,3.5rem);
+  color: var(--gold2);
+  text-shadow: 0 0 30px rgba(201,168,76,.6);
+  letter-spacing: .15em;
+}
+.title-logo .sub {
+  font-size: clamp(.9rem,2vw,1.1rem);
+  color: var(--gold); letter-spacing: .3em; margin-top: 8px;
+}
+
+.settings-box {
+  background: rgba(255,255,255,.05);
+  border: 1px solid var(--gold); border-radius: 12px;
+  padding: 28px 40px;
+  display: flex; flex-direction: column; gap: 20px;
+  min-width: 360px; max-width: 480px; width: 90vw;
+}
+.setting-row {
+  display: flex; align-items: center;
+  justify-content: space-between; gap: 16px;
+}
+.setting-label { font-size: 1rem; color: var(--gold); white-space: nowrap; }
+.setting-control { display: flex; align-items: center; gap: 8px; }
+
+input[type="range"] {
+  -webkit-appearance: none; width: 140px; height: 4px;
+  background: var(--gold); border-radius: 2px; outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 16px; height: 16px;
+  border-radius: 50%; background: var(--gold2); cursor: pointer;
+}
+.setting-value { min-width: 3.5em; text-align: right; font-size: 1rem; color: var(--gold2); }
+
+.toggle-btn {
+  background: var(--bg2); border: 1px solid var(--gold); border-radius: 20px;
+  color: var(--gold); padding: 4px 16px; cursor: pointer;
+  font-size: .9rem; font-family: inherit; transition: var(--tr);
+}
+.toggle-btn.on { background: var(--gold); color: var(--bg); font-weight: bold; }
+
+.divider { border: none; border-top: 1px solid rgba(201,168,76,.3); }
+
+.start-btn {
+  background: linear-gradient(135deg,#8b6914,#c9a84c,#8b6914);
+  border: none; border-radius: 8px;
+  color: #1a0e00; font-size: 1.2rem; font-family: inherit; font-weight: bold;
+  padding: 14px 48px; cursor: pointer; letter-spacing: .2em;
+  transition: var(--tr); box-shadow: 0 4px 20px rgba(201,168,76,.4);
+}
+.start-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 28px rgba(201,168,76,.6); }
+.start-btn:active { transform: translateY(0); }
+.start-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+/* ===== ローディング画面 ===== */
+#loading-screen { background: var(--bg); gap: 24px; }
+.loading-title { font-size: 1.5rem; color: var(--gold); letter-spacing: .2em; }
+.loading-bar-wrap {
+  width: 320px; height: 12px;
+  background: rgba(255,255,255,.1); border-radius: 6px;
+  overflow: hidden; border: 1px solid var(--gold);
+}
+.loading-bar {
+  height: 100%;
+  background: linear-gradient(90deg,var(--gold),var(--gold2));
+  border-radius: 6px; width: 0%; transition: width .25s ease;
+}
+.loading-status { font-size: .9rem; color: var(--gold); }
+
+/* ===== ゲーム画面 ===== */
+#game-screen {
+  background: var(--bg);
+  flex-direction: column; justify-content: flex-start; padding: 0;
+}
+
+/* HUD */
+.hud {
+  width: 100%; padding: 6px 14px;
+  background: var(--bg2); border-bottom: 1px solid rgba(201,168,76,.3);
+  display: flex; align-items: center; gap: 14px; flex-shrink: 0; flex-wrap: wrap;
+}
+.progress-info { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 180px; }
+.progress-label { font-size: .78rem; color: var(--gold); white-space: nowrap; }
+.progress-bar-wrap {
+  flex: 1; height: 8px;
+  background: rgba(255,255,255,.1); border-radius: 4px;
+  overflow: hidden; border: 1px solid rgba(201,168,76,.4);
+}
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg,var(--gold),var(--gold2));
+  border-radius: 4px; width: 0%; transition: width .5s ease;
+}
+.progress-count { font-size: .82rem; color: var(--gold2); white-space: nowrap; min-width: 4.5em; text-align: right; }
+
+.score-info { display: flex; gap: 14px; align-items: center; }
+.score-item { text-align: center; font-size: .72rem; }
+.score-item .lbl { color: var(--gold); display: block; }
+.score-item .val { color: var(--gold2); font-size: .95rem; font-weight: bold; }
+
+.opp-timer-wrap { display: flex; align-items: center; gap: 6px; }
+.opp-label { font-size: .72rem; color: #e06060; white-space: nowrap; }
+.opp-bar-wrap {
+  width: 72px; height: 8px;
+  background: rgba(255,255,255,.1); border-radius: 4px;
+  overflow: hidden; border: 1px solid rgba(200,60,60,.4);
+}
+.opp-bar {
+  height: 100%;
+  background: linear-gradient(90deg,#8b1a1a,#e06060);
+  border-radius: 4px; width: 100%; transition: width .1s linear;
+}
+
+/* 上の句エリア */
+.kami-area {
+  width: 100%; padding: 8px 20px;
+  background: rgba(201,168,76,.05);
+  border-bottom: 1px solid rgba(201,168,76,.2);
+  text-align: center; flex-shrink: 0;
+}
+.kami-text {
+  font-size: clamp(.95rem,2.2vw,1.35rem);
+  color: var(--gold2); letter-spacing: .12em;
+  min-height: 1.6em; line-height: 1.6; transition: opacity .3s;
+}
+.kami-state { font-size: .72rem; color: var(--gold); margin-top: 2px; letter-spacing: .1em; }
+
+/* カードエリア */
+.card-area { flex: 1; overflow: hidden; position: relative; padding: 6px; }
+.card-grid {
+  display: grid; gap: 5px;
+  width: 100%; height: 100%; align-content: start;
+}
+
+/* 各カード */
+.card {
+  background: var(--card-bg);
+  border: 2px solid var(--card-border); border-radius: var(--radius);
+  display: flex; align-items: center; justify-content: center;
+  padding: 5px 3px; cursor: pointer;
+  transition: transform var(--tr), box-shadow var(--tr);
+  position: relative; overflow: hidden; min-height: 52px;
+}
+.card:hover {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 6px 18px rgba(201,168,76,.45);
+  border-color: var(--gold2);
+}
+.card:active { transform: scale(.97); }
+.card-text {
+  font-size: clamp(.5rem,1vw,.82rem);
+  color: var(--text-dark);
+  writing-mode: vertical-rl; text-orientation: mixed;
+  line-height: 1.5; letter-spacing: .04em;
+  text-align: center; max-height: 100%; overflow: hidden;
+  pointer-events: none; white-space: nowrap;
+}
+
+/* カードアニメーション */
+.card.correct  { animation: aCorrect  .6s ease forwards; pointer-events: none; }
+.card.wrong    { animation: aWrong    .5s ease; }
+.card.taken    { animation: aTaken    .55s ease forwards; pointer-events: none; }
+.card.removing { animation: aRemove   .35s ease forwards; pointer-events: none; }
+.card.appear   { animation: aAppear   .3s ease backwards; }
+
+@keyframes aCorrect {
+  0%   { background:var(--card-bg); transform:scale(1); }
+  35%  { background:#a8f0a8; transform:scale(1.1); box-shadow:0 0 22px rgba(40,200,40,.7); }
+  100% { background:#a8f0a8; opacity:0; transform:scale(1); }
+}
+@keyframes aWrong {
+  0%,100% { transform:translateX(0); background:var(--card-bg); }
+  20%      { transform:translateX(-6px); background:#f0a8a8; }
+  50%      { transform:translateX(6px);  background:#f0a8a8; }
+  80%      { transform:translateX(-3px); }
+}
+@keyframes aTaken {
+  0%   { opacity:1; transform:scale(1); background:var(--card-bg); }
+  30%  { background:#f0d0a0; transform:scale(.9); }
+  100% { opacity:0; transform:scale(.7) translateY(-8px); }
+}
+@keyframes aRemove {
+  0%   { opacity:1; transform:scale(1); }
+  100% { opacity:0; transform:scale(.5); }
+}
+@keyframes aAppear {
+  0%   { opacity:0; transform:scale(.6) translateY(8px); }
+  100% { opacity:1; transform:scale(1)  translateY(0); }
+}
+
+/* 読み上げインジケータ */
+.reading-dot {
+  display:inline-block; width:7px; height:7px; border-radius:50%;
+  background:var(--gold2); margin-right:6px; vertical-align:middle;
+  animation:blink .7s infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.15} }
+
+/* ===== 結果画面 ===== */
+#result-screen {
+  background: radial-gradient(ellipse at center,#2d1e08,#0d0904);
+  gap: 24px;
+}
+.result-title {
+  font-size: clamp(1.4rem,4vw,2.4rem);
+  color: var(--gold2); letter-spacing: .2em;
+  text-shadow: 0 0 18px rgba(201,168,76,.5);
+}
+.result-stats {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px; min-width: 260px;
+}
+.stat-card {
+  background: rgba(255,255,255,.06);
+  border: 1px solid var(--gold); border-radius: 10px;
+  padding: 14px; text-align: center;
+}
+.stat-card .s-lbl { font-size: .82rem; color: var(--gold); display: block; margin-bottom: 4px; }
+.stat-card .s-val { font-size: 2rem; color: var(--gold2); font-weight: bold; }
+.result-btns { display: flex; gap: 14px; margin-top: 6px; }
+.result-btns button {
+  background: transparent; border: 1px solid var(--gold); border-radius: 8px;
+  color: var(--gold); font-size: 1rem; font-family: inherit;
+  padding: 11px 28px; cursor: pointer; letter-spacing: .1em; transition: var(--tr);
+}
+.result-btns button:hover { background: var(--gold); color: var(--bg); }
+</style>
+</head>
+<body>
+
+<!-- ===== タイトル画面 ===== -->
+<div id="title-screen" class="screen">
+  <div class="title-logo">
+    <div class="main">百人一首</div>
+    <div class="sub">練習ゲーム</div>
+  </div>
+
+  <div class="settings-box">
+    <div class="setting-row">
+      <span class="setting-label">練習首数</span>
+      <div class="setting-control">
+        <input type="range" id="count-slider" min="5" max="100" step="5" value="100">
+        <span class="setting-value" id="count-disp">100 首</span>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <span class="setting-label">表示カード枚数</span>
+      <div class="setting-control">
+        <input type="range" id="cards-slider" min="10" max="50" step="5" value="25">
+        <span class="setting-value" id="cards-disp">25 枚</span>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <div class="setting-row">
+      <span class="setting-label">対戦相手</span>
+      <button id="opp-toggle" class="toggle-btn">なし</button>
+    </div>
+
+    <div class="setting-row" id="speed-row" style="display:none">
+      <span class="setting-label">敵の取る速さ (秒)</span>
+      <div class="setting-control">
+        <input type="range" id="speed-slider" min="2" max="30" step="1" value="8">
+        <span class="setting-value" id="speed-disp">8 秒</span>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <button id="start-btn" class="start-btn">はじめる</button>
+  </div>
+</div>
+
+<!-- ===== ローディング画面 ===== -->
+<div id="loading-screen" class="screen hidden">
+  <div class="loading-title">音声を読み込んでいます</div>
+  <div class="loading-bar-wrap"><div class="loading-bar" id="loading-bar"></div></div>
+  <div class="loading-status" id="loading-status">準備中...</div>
+</div>
+
+<!-- ===== ゲーム画面 ===== -->
+<div id="game-screen" class="screen hidden">
+
+  <div class="hud">
+    <div class="progress-info">
+      <span class="progress-label">進捗</span>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar" id="prog-bar"></div>
+      </div>
+      <span class="progress-count" id="prog-count">0 / 0</span>
+    </div>
+    <div class="score-info">
+      <div class="score-item">
+        <span class="lbl">正解</span><span class="val" id="sc-ok">0</span>
+      </div>
+      <div class="score-item">
+        <span class="lbl">ミス</span><span class="val" id="sc-miss">0</span>
+      </div>
+      <div class="score-item" id="sc-taken-box" style="display:none">
+        <span class="lbl">取られ</span><span class="val" id="sc-taken">0</span>
+      </div>
+    </div>
+    <div class="opp-timer-wrap" id="opp-hud" style="display:none">
+      <span class="opp-label">敵▶</span>
+      <div class="opp-bar-wrap"><div class="opp-bar" id="opp-bar"></div></div>
+    </div>
+  </div>
+
+  <div class="kami-area">
+    <div class="kami-text" id="kami-text">—</div>
+    <div class="kami-state" id="kami-state">準備中</div>
+  </div>
+
+  <div class="card-area" id="card-area">
+    <div class="card-grid" id="card-grid"></div>
+  </div>
+</div>
+
+<!-- ===== 結果画面 ===== -->
+<div id="result-screen" class="screen hidden">
+  <div class="result-title">結果発表</div>
+  <div class="result-stats">
+    <div class="stat-card">
+      <span class="s-lbl">練習した首</span>
+      <span class="s-val" id="r-total">0</span>
+    </div>
+    <div class="stat-card">
+      <span class="s-lbl">正解</span>
+      <span class="s-val" id="r-ok">0</span>
+    </div>
+    <div class="stat-card">
+      <span class="s-lbl">ミス</span>
+      <span class="s-val" id="r-miss">0</span>
+    </div>
+    <div class="stat-card" id="r-taken-card" style="display:none">
+      <span class="s-lbl">取られ</span>
+      <span class="s-val" id="r-taken">0</span>
+    </div>
+  </div>
+  <div class="result-btns">
+    <button id="retry-btn">もう一度</button>
+    <button id="home-btn">タイトルへ</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ============================================================
+//  グローバル変数
+// ============================================================
+let POEMS = [];           // poems.json から読み込んだ全100首
+let audioCtx = null;
+const audioCache = new Map();  // poem.id -> AudioBuffer
+
+// ゲーム設定
+const cfg = {
+  count:        100,
+  displayCards: 25,
+  useOpponent:  false,
+  opponentSec:  8,
+};
+
+// ゲーム状態
+const st = {
+  playQueue:      [],    // 再生順の poem.id 配列 (shuffled)
+  currentQIdx:    0,     // playQueue の現在位置
+  displayedCards: [],    // 現在表示中の poem オブジェクト配列
+  answeredIds:    new Set(),
+  batchCorrect:   0,     // 現バッチの正解数 (5でリセット)
+  scoreOk:    0,
+  scoreMiss:  0,
+  scoreTaken: 0,
+  canAnswer:  false,
+  rafId:      null,
+  oppStartTime: null,
+  oppDuration:  0,
+};
+
+// ============================================================
+//  ユーティリティ
+// ============================================================
+const $ = id => document.getElementById(id);
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = (Math.random() * (i + 1)) | 0;
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function setScreen(name) {
+  ['title-screen','loading-screen','game-screen','result-screen'].forEach(id => {
+    $(id).classList.toggle('hidden', id !== name);
+  });
+}
+
+function getPoemById(id) {
+  return POEMS.find(p => p.id === id);
+}
+
+// ============================================================
+//  音声関連
+// ============================================================
+function ensureAudioCtx() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+async function loadAudioFile(id) {
+  if (audioCache.has(id)) return true;
+  const ctx = ensureAudioCtx();
+  for (const fmt of ['wav', 'mp3', 'ogg']) {
+    try {
+      const res = await fetch(`audio/${id}.${fmt}`);
+      if (!res.ok) continue;
+      const buf = await ctx.decodeAudioData(await res.arrayBuffer());
+      audioCache.set(id, buf);
+      return true;
+    } catch (_) {}
+  }
+  return false;  // 音声ファイルなし (それでもゲームは動く)
+}
+
+async function loadAudioBatch(ids) {
+  const bar    = $('loading-bar');
+  const status = $('loading-status');
+  let done = 0;
+
+  const update = () => {
+    const pct = ids.length > 0 ? done / ids.length * 100 : 100;
+    bar.style.width = pct + '%';
+    status.textContent = `${done} / ${ids.length} 首`;
+  };
+  update();
+
+  // 最大 6 並列
+  const CONC = 6;
+  let idx = 0;
+  const worker = async () => {
+    while (idx < ids.length) {
+      const id = ids[idx++];
+      await loadAudioFile(id);
+      done++;
+      update();
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(CONC, ids.length) }, worker));
+}
+
+let currentSource = null;
+
+function playAudio(id, onEnded) {
+  if (currentSource) { try { currentSource.stop(); } catch (_) {} }
+  const buf = audioCache.get(id);
+  if (!buf) { onEnded && onEnded(); return; }
+
+  const ctx = ensureAudioCtx();
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.connect(ctx.destination);
+  src.onended = () => { currentSource = null; onEnded && onEnded(); };
+  src.start(0);
+  currentSource = src;
+}
+
+// ============================================================
+//  カードグリッドレイアウト計算
+// ============================================================
+function calcColumns(n) {
+  const area = $('card-area');
+  const W = area.clientWidth  - 12;
+  const H = area.clientHeight - 12;
+  const GAP = 5;
+
+  let bestCols = 1, bestArea = 0;
+  for (let cols = 1; cols <= n; cols++) {
+    const rows = Math.ceil(n / cols);
+    const cw = (W - GAP * (cols - 1)) / cols;
+    const ch = (H - GAP * (rows - 1)) / rows;
+    if (cw < 44 || ch < 44) continue;
+    const a = cw * ch;
+    if (a > bestArea) { bestArea = a; bestCols = cols; }
+  }
+  return bestCols;
+}
+
+// ============================================================
+//  カード描画
+// ============================================================
+function renderCards() {
+  const grid = $('card-grid');
+  const n    = st.displayedCards.length;
+  const cols = calcColumns(Math.max(n, 1));
+  grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+
+  // 既存カードの id セット
+  const existingIds = new Set([...grid.children].map(el => +el.dataset.id));
+  const newIds      = new Set(st.displayedCards.map(p => p.id));
+
+  // 削除：表示中でなくなったカード
+  for (const el of [...grid.children]) {
+    const id = +el.dataset.id;
+    if (!newIds.has(id)) {
+      el.classList.add('removing');
+      el.addEventListener('animationend', () => el.remove(), { once: true });
+    }
+  }
+
+  // 追加：新しいカード
+  for (const poem of st.displayedCards) {
+    if (!existingIds.has(poem.id)) {
+      const card = createCardEl(poem);
+      grid.appendChild(card);
+    }
+  }
+}
+
+function createCardEl(poem) {
+  const card = document.createElement('div');
+  card.className = 'card appear';
+  card.dataset.id = poem.id;
+  card.innerHTML = `<div class="card-text">${poem.lower}</div>`;
+  card.addEventListener('click', () => handleCardClick(poem.id));
+  return card;
+}
+
+// ============================================================
+//  カード補充ロジック
+// ============================================================
+function fillCards() {
+  // 答えになる歌
+  const currentId = st.playQueue[st.currentQIdx];
+
+  // 残りの未回答の歌からランダムに displayCards 枚選ぶ
+  const pool = shuffle(POEMS.filter(p => !st.answeredIds.has(p.id)));
+  st.displayedCards = pool.slice(0, cfg.displayCards);
+
+  // 正解カードが必ず含まれるようにする
+  ensureAnswerInCards(currentId);
+}
+
+function addOneCard(excludeId) {
+  // 未回答 & 未表示 からランダムに1枚追加
+  const displayedSet = new Set(st.displayedCards.map(p => p.id));
+  const pool = POEMS.filter(p =>
+    !st.answeredIds.has(p.id) &&
+    !displayedSet.has(p.id)
+  );
+  if (pool.length > 0) {
+    const pick = pool[(Math.random() * pool.length) | 0];
+    st.displayedCards.push(pick);
+  }
+}
+
+function ensureAnswerInCards(answerId) {
+  if (st.displayedCards.find(p => p.id === answerId)) return;
+  if (st.displayedCards.length < cfg.displayCards) {
+    st.displayedCards.push(getPoemById(answerId));
+  } else {
+    const idx = (Math.random() * st.displayedCards.length) | 0;
+    st.displayedCards[idx] = getPoemById(answerId);
+  }
+}
+
+// ============================================================
+//  HUD 更新
+// ============================================================
+function updateHUD() {
+  const done = st.scoreOk + st.scoreTaken;
+  const pct  = cfg.count > 0 ? done / cfg.count * 100 : 0;
+  $('prog-bar').style.width   = pct + '%';
+  $('prog-count').textContent = `${done} / ${cfg.count}`;
+  $('sc-ok').textContent      = st.scoreOk;
+  $('sc-miss').textContent    = st.scoreMiss;
+  $('sc-taken').textContent   = st.scoreTaken;
+}
+
+// ============================================================
+//  対戦相手タイマー
+// ============================================================
+function startOppTimer() {
+  if (!cfg.useOpponent) return;
+  const jitter   = cfg.opponentSec * 0.3;
+  st.oppDuration  = (cfg.opponentSec + (Math.random() * 2 - 1) * jitter) * 1000;
+  st.oppStartTime = performance.now();
+  tickOppBar();
+}
+
+function stopOppTimer() {
+  if (st.rafId) cancelAnimationFrame(st.rafId);
+  st.rafId = st.oppStartTime = null;
+  $('opp-bar').style.width = '100%';
+}
+
+function tickOppBar() {
+  if (!st.oppStartTime) return;
+  const remaining = 1 - (performance.now() - st.oppStartTime) / st.oppDuration;
+  if (remaining <= 0) { opponentTake(); return; }
+  $('opp-bar').style.width = (remaining * 100) + '%';
+  st.rafId = requestAnimationFrame(tickOppBar);
+}
+
+function opponentTake() {
+  if (!st.canAnswer) return;
+  st.canAnswer = false;
+  stopOppTimer();
+  st.scoreTaken++;
+  updateHUD();
+  $('kami-state').textContent = '敵に取られました…';
+
+  const currentId = st.playQueue[st.currentQIdx];
+  const cardEl    = $('card-grid').querySelector(`[data-id="${currentId}"]`);
+
+  const proceed = () => {
+    st.answeredIds.add(currentId);
+    st.displayedCards = st.displayedCards.filter(p => p.id !== currentId);
+    setTimeout(goNextPoem, 600);
+  };
+
+  if (cardEl) {
+    cardEl.classList.add('taken');
+    cardEl.addEventListener('animationend', () => { cardEl.remove(); proceed(); }, { once: true });
+  } else {
+    proceed();
+  }
+}
+
+// ============================================================
+//  カードクリック処理
+// ============================================================
+function handleCardClick(clickedId) {
+  if (!st.canAnswer) return;
+  const currentId = st.playQueue[st.currentQIdx];
+
+  if (clickedId === currentId) {
+    // ===== 正解 =====
+    st.canAnswer = false;
+    stopOppTimer();
+    st.scoreOk++;
+    st.batchCorrect++;
+    updateHUD();
+
+    const cardEl = $('card-grid').querySelector(`[data-id="${clickedId}"]`);
+    const afterAnim = () => {
+      st.answeredIds.add(clickedId);
+      st.displayedCards = st.displayedCards.filter(p => p.id !== clickedId);
+
+      if (st.batchCorrect >= 5) {
+        // 5問でカードを全リセット
+        st.batchCorrect = 0;
+        fillCards();
+      } else {
+        // 1枚補充
+        addOneCard(clickedId);
+        // 次の問題の答えを確保 (次の問題が存在する場合)
+        const nextQIdx = st.currentQIdx + 1;
+        if (nextQIdx < st.playQueue.length) {
+          ensureAnswerInCards(st.playQueue[nextQIdx]);
+        }
+      }
+
+      renderCards();
+      setTimeout(goNextPoem, 250);
+    };
+
+    if (cardEl) {
+      cardEl.classList.add('correct');
+      cardEl.addEventListener('animationend', afterAnim, { once: true });
+    } else {
+      afterAnim();
+    }
+
+  } else {
+    // ===== 不正解 =====
+    st.scoreMiss++;
+    updateHUD();
+    const cardEl = $('card-grid').querySelector(`[data-id="${clickedId}"]`);
+    if (cardEl) {
+      cardEl.classList.add('wrong');
+      cardEl.addEventListener('animationend', () => cardEl.classList.remove('wrong'), { once: true });
+    }
+  }
+}
+
+// ============================================================
+//  ゲームフロー
+// ============================================================
+function goNextPoem() {
+  st.currentQIdx++;
+  if (st.currentQIdx >= st.playQueue.length) {
+    showResult();
+    return;
+  }
+
+  // 次の答えカードを確保
+  ensureAnswerInCards(st.playQueue[st.currentQIdx]);
+  renderCards();
+
+  setTimeout(playCurrentPoem, 200);
+}
+
+function playCurrentPoem() {
+  const poem = getPoemById(st.playQueue[st.currentQIdx]);
+  $('kami-text').innerHTML = `<span class="reading-dot"></span>${poem.upper}`;
+  $('kami-state').textContent = '読み上げ中…';
+  st.canAnswer = false;
+
+  playAudio(poem.id, () => {
+    // 再生終了 → 回答受付開始
+    $('kami-state').textContent = '札を選んでください';
+    st.canAnswer = true;
+    startOppTimer();
+  });
+}
+
+function startGame() {
+  // 状態リセット
+  st.playQueue     = shuffle(POEMS.map(p => p.id)).slice(0, cfg.count);
+  st.currentQIdx   = 0;
+  st.answeredIds   = new Set();
+  st.batchCorrect  = 0;
+  st.scoreOk       = 0;
+  st.scoreMiss     = 0;
+  st.scoreTaken    = 0;
+  st.canAnswer     = false;
+  stopOppTimer();
+  if (currentSource) { try { currentSource.stop(); } catch (_) {} }
+
+  // HUD の対戦相手列
+  $('opp-hud').style.display      = cfg.useOpponent ? 'flex'   : 'none';
+  $('sc-taken-box').style.display = cfg.useOpponent ? 'block'  : 'none';
+  updateHUD();
+
+  // カード初期化
+  $('card-grid').innerHTML = '';
+  st.displayedCards = [];
+  fillCards();
+  renderCards();
+
+  // 最初の歌を再生
+  playCurrentPoem();
+}
+
+function showResult() {
+  $('r-total').textContent = st.scoreOk + st.scoreTaken;
+  $('r-ok').textContent    = st.scoreOk;
+  $('r-miss').textContent  = st.scoreMiss;
+  $('r-taken').textContent = st.scoreTaken;
+  $('r-taken-card').style.display = cfg.useOpponent ? 'block' : 'none';
+  setScreen('result-screen');
+}
+
+// ============================================================
+//  タイトル画面 UI
+// ============================================================
+function initUI() {
+  const countSlider = $('count-slider');
+  const cardsSlider = $('cards-slider');
+  const speedSlider = $('speed-slider');
+  const oppToggle   = $('opp-toggle');
+
+  countSlider.addEventListener('input', () => {
+    cfg.count = +countSlider.value;
+    $('count-disp').textContent = `${cfg.count} 首`;
+  });
+  cardsSlider.addEventListener('input', () => {
+    cfg.displayCards = +cardsSlider.value;
+    $('cards-disp').textContent = `${cfg.displayCards} 枚`;
+  });
+  speedSlider.addEventListener('input', () => {
+    cfg.opponentSec = +speedSlider.value;
+    $('speed-disp').textContent = `${cfg.opponentSec} 秒`;
+  });
+  oppToggle.addEventListener('click', () => {
+    cfg.useOpponent = !cfg.useOpponent;
+    oppToggle.textContent = cfg.useOpponent ? 'あり' : 'なし';
+    oppToggle.classList.toggle('on', cfg.useOpponent);
+    $('speed-row').style.display = cfg.useOpponent ? 'flex' : 'none';
+  });
+
+  $('start-btn').addEventListener('click', async () => {
+    const btn = $('start-btn');
+    btn.disabled = true;
+    ensureAudioCtx(); // ユーザーインタラクションで AudioContext を作成
+
+    // 再生予定 ID を決定 (ここで shuffle して playQueue 仮確定)
+    const tempQueue = shuffle(POEMS.map(p => p.id)).slice(0, cfg.count);
+
+    setScreen('loading-screen');
+    await loadAudioBatch(tempQueue);
+    setScreen('game-screen');
+    startGame();
+    btn.disabled = false;
+  });
+
+  $('retry-btn').addEventListener('click', () => {
+    setScreen('loading-screen');
+    // 前回と同じ設定で再スタート
+    const tempQueue = shuffle(POEMS.map(p => p.id)).slice(0, cfg.count);
+    loadAudioBatch(tempQueue).then(() => {
+      setScreen('game-screen');
+      startGame();
+    });
+  });
+
+  $('home-btn').addEventListener('click', () => {
+    setScreen('title-screen');
+    $('start-btn').disabled = false;
+  });
+}
+
+// ============================================================
+//  エントリポイント
+// ============================================================
+async function init() {
+  try {
+    const res = await fetch('poems.json');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    POEMS = await res.json();
+  } catch (e) {
+    alert(
+      'poems.json の読み込みに失敗しました。\n\n' +
+      'ローカルサーバー経由で開いてください:\n' +
+      '  python -m http.server 8000\n' +
+      '  → http://localhost:8000/'
+    );
+    return;
+  }
+
+  initUI();
+  setScreen('title-screen');
+}
+
+init();
+</script>
+</body>
+</html>

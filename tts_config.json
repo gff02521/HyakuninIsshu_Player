@@ -1,0 +1,18 @@
+{
+  "_comment": "Gemini TTS generation settings",
+  "api_key_env": "GEMINI_API_KEY",
+  "model": "gemini-2.5-flash-preview-tts",
+  "voice_name": "Kore",
+  "output_dir": "audio",
+  "output_format": "wav",
+  "sample_rate": 24000,
+  "pause_between_phrases_sec": 0.4,
+  "retry_count": 3,
+  "retry_delay_sec": 2.0,
+  "available_voices": [
+    "Zephyr", "Puck", "Charon", "Kore", "Fenrir",
+    "Aoede", "Leda", "Orus", "Schedar", "Gacrux",
+    "Pulcherrima", "Achird", "Zubenelgenubi", "Vindemiatrix",
+    "Sadachbia", "Sadaltager", "Sulafat"
+  ]
+}
