@@ -1,6 +1,6 @@
 {
   "_comment": "Prompt settings for Gemini TTS. {upper} is replaced with the upper verse text.",
-  "system_instruction": "あなたは百人一首の読み手です。競技かるたの読み上げのように、落ち着いた声で、はっきりと、やや朗々と読み上げてください。各フレーズを丁寧に区切り、聴き手が札を探せるよう適切な間を取ってください。",
+  "system_instruction": "あなたは百人一首の読み手です。百人一首の読み上げのトーンで喋ってください。ゆっくりお願いします。競技かるたの読み上げのように、落ち着いた声で、はっきりと、やや朗々と読み上げてください。各フレーズを丁寧に区切り、聴き手が札を探せるよう適切な間を取ってください。",
   "text_template": "{upper}",
   "prefix": "",
   "suffix": "",

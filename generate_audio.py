@@ -20,7 +20,6 @@ import argparse
 import base64
 import json
 import os
-import struct
 import sys
 import time
 import wave
@@ -30,6 +29,38 @@ from pathlib import Path
 def load_json(path: str) -> dict | list:
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def load_dotenv(dotenv_path: Path) -> None:
+    """Load simple KEY=VALUE pairs from a .env file into process env."""
+    if not dotenv_path.exists():
+        return
+
+    for raw_line in dotenv_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+
+        if line.startswith("export "):
+            line = line[len("export "):].strip()
+
+        if "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            continue
+
+        if (
+            (value.startswith('"') and value.endswith('"'))
+            or (value.startswith("'") and value.endswith("'"))
+        ) and len(value) >= 2:
+            value = value[1:-1]
+
+        # Keep already-exported variables as highest priority.
+        os.environ.setdefault(key, value)
 
 
 def save_wav(pcm_bytes: bytes, output_path: str, sample_rate: int = 24000) -> None:
@@ -93,18 +124,31 @@ def generate_audio_for_poem(
         )
     )
 
-    generate_config = types.GenerateContentConfig(
-        response_modalities=["AUDIO"],
-        speech_config=speech_config,
-    )
-    if system_instruction:
-        generate_config.system_instruction = system_instruction
+    def build_generate_config(system_text: str | None):
+        cfg = types.GenerateContentConfig(
+            response_modalities=["AUDIO"],
+            speech_config=speech_config,
+        )
+        if system_text:
+            cfg.system_instruction = system_text
+        return cfg
 
-    response = client.models.generate_content(
-        model=model,
-        contents=contents,
-        config=generate_config,
-    )
+    try:
+        response = client.models.generate_content(
+            model=model,
+            contents=contents,
+            config=build_generate_config(system_instruction),
+        )
+    except Exception as e:
+        # Some TTS endpoints intermittently return 500 when system instruction is used.
+        if system_instruction and "500" in str(e):
+            response = client.models.generate_content(
+                model=model,
+                contents=contents,
+                config=build_generate_config(None),
+            )
+        else:
+            raise
 
     audio_part = response.candidates[0].content.parts[0]
     raw_data = audio_part.inline_data.data
@@ -136,6 +180,7 @@ def main() -> None:
 
     # Load configuration files
     script_dir = Path(__file__).parent
+    load_dotenv(script_dir / ".env")
     config = load_json(script_dir / args.config)
     poems_data = load_json(script_dir / args.poems)
     prompt_config = load_json(script_dir / args.prompt)
@@ -173,6 +218,7 @@ def main() -> None:
     if not api_key:
         print(f"エラー: 環境変数 {api_key_env} が設定されていません。", file=sys.stderr)
         print(f"  export {api_key_env}=your_api_key_here", file=sys.stderr)
+        print(f"  または {script_dir / '.env'} に {api_key_env}=... を記載", file=sys.stderr)
         sys.exit(1)
 
     try:

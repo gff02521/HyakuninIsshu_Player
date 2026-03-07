@@ -72,6 +72,7 @@ html, body {
 
 input[type="range"] {
   -webkit-appearance: none; width: 140px; height: 4px;
+  appearance: none;
   background: var(--gold); border-radius: 2px; outline: none;
 }
 input[type="range"]::-webkit-slider-thumb {
@@ -118,7 +119,9 @@ input[type="range"]::-webkit-slider-thumb {
 /* ===== ゲーム画面 ===== */
 #game-screen {
   background: var(--bg);
-  flex-direction: column; justify-content: flex-start; padding: 0;
+  flex-direction: column; justify-content: flex-start;
+  align-items: stretch;
+  padding: 0;
 }
 
 /* HUD */
@@ -174,10 +177,11 @@ input[type="range"]::-webkit-slider-thumb {
 .kami-state { font-size: .72rem; color: var(--gold); margin-top: 2px; letter-spacing: .1em; }
 
 /* カードエリア */
-.card-area { flex: 1; overflow: hidden; position: relative; padding: 6px; }
+.card-area { flex: 1; width: 100%; overflow: auto; position: relative; padding: 6px; }
 .card-grid {
   display: grid; gap: 5px;
-  width: 100%; height: 100%; align-content: start;
+  width: 100%; align-content: start;
+  grid-auto-rows: minmax(56px, auto);
 }
 
 /* 各カード */
@@ -187,7 +191,7 @@ input[type="range"]::-webkit-slider-thumb {
   display: flex; align-items: center; justify-content: center;
   padding: 5px 3px; cursor: pointer;
   transition: transform var(--tr), box-shadow var(--tr);
-  position: relative; overflow: hidden; min-height: 52px;
+  position: relative; overflow: hidden; min-height: 64px;
 }
 .card:hover {
   transform: translateY(-3px) scale(1.02);
@@ -196,12 +200,12 @@ input[type="range"]::-webkit-slider-thumb {
 }
 .card:active { transform: scale(.97); }
 .card-text {
-  font-size: clamp(.5rem,1vw,.82rem);
+  font-size: clamp(.68rem,1.35vw,1.08rem);
   color: var(--text-dark);
   writing-mode: vertical-rl; text-orientation: mixed;
-  line-height: 1.5; letter-spacing: .04em;
+  line-height: 1.35; letter-spacing: .02em;
   text-align: center; max-height: 100%; overflow: hidden;
-  pointer-events: none; white-space: nowrap;
+  pointer-events: none; white-space: pre-line;
 }
 
 /* カードアニメーション */
@@ -464,15 +468,16 @@ function ensureAudioCtx() {
 async function loadAudioFile(id) {
   if (audioCache.has(id)) return true;
   const ctx = ensureAudioCtx();
-  for (const fmt of ['wav', 'mp3', 'ogg']) {
-    try {
-      const res = await fetch(`audio/${id}.${fmt}`);
-      if (!res.ok) continue;
-      const buf = await ctx.decodeAudioData(await res.arrayBuffer());
-      audioCache.set(id, buf);
-      return true;
-    } catch (_) {}
-  }
+
+  const paddedId = String(id).padStart(3, '0');
+  try {
+    const res = await fetch(`audio_mp3/a${paddedId}.mp3`);
+    if (!res.ok) return false;
+    const buf = await ctx.decodeAudioData(await res.arrayBuffer());
+    audioCache.set(id, buf);
+    return true;
+  } catch (_) {}
+
   return false;  // 音声ファイルなし (それでもゲームは動く)
 }
 
@@ -524,19 +529,21 @@ function playAudio(id, onEnded) {
 function calcColumns(n) {
   const area = $('card-area');
   const W = area.clientWidth  - 12;
-  const H = area.clientHeight - 12;
   const GAP = 5;
+  const MAX_COLS = 17;
+  const TARGET_CARD_W = 70;
+  const MIN_CARD_W = 50;
 
-  let bestCols = 1, bestArea = 0;
-  for (let cols = 1; cols <= n; cols++) {
-    const rows = Math.ceil(n / cols);
+  let cols = Math.floor((W + GAP) / (TARGET_CARD_W + GAP));
+  cols = Math.max(1, Math.min(cols, MAX_COLS, n));
+
+  while (cols > 1) {
     const cw = (W - GAP * (cols - 1)) / cols;
-    const ch = (H - GAP * (rows - 1)) / rows;
-    if (cw < 44 || ch < 44) continue;
-    const a = cw * ch;
-    if (a > bestArea) { bestArea = a; bestCols = cols; }
+    if (cw >= MIN_CARD_W) break;
+    cols--;
   }
-  return bestCols;
+
+  return cols;
 }
 
 // ============================================================
@@ -861,6 +868,12 @@ function initUI() {
   $('home-btn').addEventListener('click', () => {
     setScreen('title-screen');
     $('start-btn').disabled = false;
+  });
+
+  window.addEventListener('resize', () => {
+    if (!$('game-screen').classList.contains('hidden')) {
+      renderCards();
+    }
   });
 }
 
